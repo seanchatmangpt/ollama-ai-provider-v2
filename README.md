@@ -29,7 +29,7 @@ import { generateText } from 'ai';
 
 // Works everywhere - Node.js, browsers, edge environments
 const { text } = await generateText({
-  model: ollama('llama3.2'),
+  model: ollama('ministral-3:3b),
   prompt: 'Write a haiku about coding',
 });
 
@@ -44,7 +44,7 @@ console.log(text);
 import { streamText } from 'ai';
 
 const { textStream } = await streamText({
-  model: ollama('llama3.2'),
+  model: ollama('ministral-3:3b'),
   prompt: 'Tell me a story about artificial intelligence',
 });
 
@@ -60,7 +60,7 @@ import { generateText, tool } from 'ai';
 import { z } from 'zod';
 
 const { text, toolCalls } = await generateText({
-  model: ollama('llama3.2'),
+  model: ollama('ministral-3:3b'),
   prompt: 'What is the weather like in San Francisco?',
   tools: {
     getWeather: tool({
@@ -95,7 +95,7 @@ Access Ollama's native parameters while maintaining AI SDK compatibility:
 
 ```typescript
 const { text } = await generateText({
-  model: ollama('llama3.2'),
+  model: ollama('ministral-3:3b'),
   providerOptions: {
     ollama: {
       options: {
@@ -163,20 +163,14 @@ const customOllama = createOllama({
 });
 
 const { text } = await generateText({
-  model: customOllama('llama3.2'),
+  model: customOllama('ministral-3:3b'),
   prompt: 'Hello from remote server!',
 });
 ```
 
 ## Supported Models
 
-Works with any model in your Ollama installation, including:
 
-- **Chat Models**: `llama3.2`, `mistral`, `phi4-mini`, `qwen2.5`, `codellama`, `gemma3`
-- **Vision Models**: `llava`, `llama3.2-vision`, `minicpm-v`
-- **Reasoning Models**: `deepseek-r1:7b`, `deepseek-r1:1.5b`, `deepseek-r1:8b`
-- **Code Models**: `codellama:code`, `codellama:python`, `deepseek-coder-v2`
-- **Embedding Models**: `nomic-embed-text`, `all-minilm`, `mxbai-embed-large`
 
 ## Prerequisites
 
@@ -189,7 +183,7 @@ Works with any model in your Ollama installation, including:
 ollama serve
 
 # Pull a model
-ollama pull llama3.2
+ollama pull ministral-3:3b
 ```
 
 ## Contributing
