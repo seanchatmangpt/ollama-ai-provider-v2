@@ -1,0 +1,36 @@
+name: v26.9.16 RFC Closure
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/bounded-local-unknown.ts'
+      - 'src/bounded-local-unknown.test.ts'
+      - 'src/index.ts'
+      - '.github/workflows/v26-9-16-rfc-closure.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-local-unknown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Exact subject
+        run: |
+          echo "HEAD=$GITHUB_SHA"
+          git rev-parse HEAD
+      - name: Bounded local UNKNOWN court
+        run: pnpm exec vitest --config vitest.node.config.mjs --run src/bounded-local-unknown.test.ts
+      - name: Type check
+        run: pnpm run type-check
