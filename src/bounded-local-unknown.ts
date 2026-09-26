@@ -80,12 +80,12 @@ function evidence(
   void task;
   return {
     provider: 'ollama',
-    model: options.model,
-    configRevision: options.configRevision,
+    model: String(options?.model ?? ''),
+    configRevision: String(options?.configRevision ?? ''),
     endpointOrigin: origin,
-    maxOutputTokens: options.budget.maxOutputTokens,
-    maxContextTokens: options.budget.maxContextTokens,
-    timeoutMs: options.budget.timeoutMs,
+    maxOutputTokens: Number(options?.budget?.maxOutputTokens ?? 0),
+    maxContextTokens: Number(options?.budget?.maxContextTokens ?? 0),
+    timeoutMs: Number(options?.budget?.timeoutMs ?? 0),
     ...usage,
   };
 }
@@ -103,18 +103,32 @@ function refusal(
     capabilityId: SHLLM_CAPABILITY_ID,
     standing: 'observed',
     authority: 'none',
-    taskId: task.taskId,
-    semanticSubject: task.semanticSubject,
+    taskId: String(task?.taskId ?? ''),
+    semanticSubject: String(task?.semanticSubject ?? ''),
     reason,
     evidence: evidence(task, options, origin, usage),
   };
 }
+
+/** Largest delay setTimeout honours; larger values fire immediately. */
+export const MAX_LOCAL_TIMEOUT_MS = 2_147_483_647;
 
 function admittedOrigin(baseURL: string, allowedOrigins: string[] = []): string | null {
   let parsed: URL;
   try {
     parsed = new URL(baseURL);
   } catch {
+    return null;
+  }
+
+  // Only plain HTTP(S) endpoints carry an origin that can be admitted. Opaque
+  // schemes (data:, file:, blob:) serialise their origin as "null" and must
+  // never match an allow-list entry. Embedded credentials, query strings and
+  // fragments would change the request target once `/generate` is appended.
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return null;
+  }
+  if (parsed.username !== '' || parsed.password !== '' || parsed.search !== '' || parsed.hash !== '') {
     return null;
   }
 
@@ -131,6 +145,36 @@ function admittedOrigin(baseURL: string, allowedOrigins: string[] = []): string 
   return null;
 }
 
+function positiveInteger(value: unknown): boolean {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+function validBudget(budget: LocalInferenceBudget | undefined): boolean {
+  if (budget == null || typeof budget !== 'object') {
+    return false;
+  }
+  if (
+    !positiveInteger(budget.maxOutputTokens) ||
+    !positiveInteger(budget.maxContextTokens) ||
+    !positiveInteger(budget.maxContextChars) ||
+    !positiveInteger(budget.timeoutMs) ||
+    budget.timeoutMs > MAX_LOCAL_TIMEOUT_MS
+  ) {
+    return false;
+  }
+  if (budget.temperature !== undefined && !(typeof budget.temperature === 'number' && Number.isFinite(budget.temperature) && budget.temperature >= 0)) {
+    return false;
+  }
+  if (budget.seed !== undefined && !(typeof budget.seed === 'number' && Number.isSafeInteger(budget.seed))) {
+    return false;
+  }
+  return true;
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
 /**
  * Execute one admitted UNKNOWN_LOCAL task against an explicitly local Ollama
  * endpoint. This function performs exactly one provider attempt, never retries,
@@ -141,8 +185,8 @@ export async function runBoundedLocalUnknown(
   task: AdmittedLocalUnknownTask,
   options: BoundedLocalOllamaOptions,
 ): Promise<BoundedLocalUnknownResult> {
-  const baseURL = (options.baseURL ?? 'http://127.0.0.1:11434/api').replace(/\/$/, '');
-  const origin = admittedOrigin(baseURL, options.allowedOrigins);
+  const baseURL = String(options?.baseURL ?? 'http://127.0.0.1:11434/api').replace(/\/$/, '');
+  const origin = admittedOrigin(baseURL, Array.isArray(options?.allowedOrigins) ? options.allowedOrigins : []);
   const fallbackOrigin = (() => {
     try {
       return new URL(baseURL).origin;
@@ -151,7 +195,14 @@ export async function runBoundedLocalUnknown(
     }
   })();
 
-  if (task.standing !== 'admitted' || task.workClass !== 'UNKNOWN_LOCAL') {
+  if (
+    task == null ||
+    task.standing !== 'admitted' ||
+    task.workClass !== 'UNKNOWN_LOCAL' ||
+    !nonEmptyString(task.taskId) ||
+    !nonEmptyString(task.semanticSubject) ||
+    typeof task.prompt !== 'string'
+  ) {
     return refusal(task, options, origin ?? fallbackOrigin, 'REFUSED', 'task_not_admitted_unknown_local');
   }
 
@@ -159,13 +210,12 @@ export async function runBoundedLocalUnknown(
     return refusal(task, options, fallbackOrigin, 'REFUSED', 'endpoint_not_locally_admitted');
   }
 
+  if (options == null || !nonEmptyString(options.model) || !nonEmptyString(options.configRevision)) {
+    return refusal(task, options, origin, 'REFUSED', 'local_profile_identity_missing');
+  }
+
   const { budget } = options;
-  if (
-    budget.maxOutputTokens <= 0 ||
-    budget.maxContextTokens <= 0 ||
-    budget.maxContextChars <= 0 ||
-    budget.timeoutMs <= 0
-  ) {
+  if (!validBudget(budget)) {
     return refusal(task, options, origin, 'REFUSED', 'invalid_finite_budget');
   }
 
@@ -197,7 +247,14 @@ export async function runBoundedLocalUnknown(
         },
       }),
       signal: controller.signal,
+      // A redirect could move the single attempt to a non-admitted (frontier)
+      // origin; it is surfaced as a refusal instead of being followed.
+      redirect: 'manual',
     });
+
+    if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+      return refusal(task, options, origin, 'REFUSED', 'local_provider_redirect_refused');
+    }
 
     if (response.status === 404) {
       return refusal(task, options, origin, 'UNSUPPORTED', 'local_model_or_endpoint_unsupported');
@@ -216,13 +273,22 @@ export async function runBoundedLocalUnknown(
 
     try {
       body = (await response.json()) as typeof body;
-    } catch {
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        return refusal(task, options, origin, 'RESOURCE_EXHAUSTED', 'local_timeout_budget_exhausted');
+      }
       return refusal(task, options, origin, 'REFUSED', 'malformed_local_provider_response');
     }
 
-    const promptTokens = typeof body.prompt_eval_count === 'number' ? body.prompt_eval_count : undefined;
-    const outputTokens = typeof body.eval_count === 'number' ? body.eval_count : undefined;
-    const totalDurationNs = typeof body.total_duration === 'number' ? body.total_duration : undefined;
+    if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+      return refusal(task, options, origin, 'REFUSED', 'malformed_local_provider_response');
+    }
+
+    const count = (value: unknown): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+    const promptTokens = count(body.prompt_eval_count);
+    const outputTokens = count(body.eval_count);
+    const totalDurationNs = count(body.total_duration);
     const usage = { promptTokens, outputTokens, totalDurationNs };
 
     if (outputTokens != null && outputTokens > budget.maxOutputTokens) {
@@ -230,7 +296,7 @@ export async function runBoundedLocalUnknown(
     }
 
     if (typeof body.response !== 'string') {
-      return refusal(task, options, origin, 'REFUSED', 'malformed_local_candidate');
+      return refusal(task, options, origin, 'REFUSED', 'malformed_local_candidate', usage);
     }
 
     if (body.response.trim() === '') {

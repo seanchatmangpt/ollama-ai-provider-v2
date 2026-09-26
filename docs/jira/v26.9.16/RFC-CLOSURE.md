@@ -31,3 +31,28 @@ This repo owns only the local-model provider boundary used by the DME routing ar
 ## Definition of done
 
 Exact-head tests prove bounded local invocation, explicit model/provider identity, usage evidence, candidate-only output, typed insufficiency, and zero automatic frontier fallback. Upstream routing remains owned by ash_a2a/CMCA.
+
+## v26.9.26 hardening addendum
+
+Court file: `src/bounded-local-unknown.hardening.test.ts` (real loopback `node:http` server,
+platform `fetch`, state-based assertions on server-recorded requests). 26 cases marked
+`[defect]` failed on head `a77330e8` and pass after the fix:
+
+- non-finite / fractional / out-of-range budgets (NaN, Infinity, `timeoutMs > 2^31-1`, which
+  `setTimeout` fires immediately) reached the provider instead of `invalid_finite_budget`;
+- `redirect` was followed, so a local endpoint could move the single attempt to a
+  non-admitted (frontier) origin; now `redirect: 'manual'` → `local_provider_redirect_refused`;
+- opaque-scheme URLs (`data:` with an allow-listed `"null"` origin), embedded credentials,
+  query strings and fragments were admitted as endpoints;
+- malformed tasks (null, non-string prompt, empty ids) threw instead of a typed refusal;
+- empty model / config revision passed (`local_profile_identity_missing`);
+- JSON `null` / array bodies and a body stalled past the timeout were misclassified
+  (the stall is now `RESOURCE_EXHAUSTED`); negative / non-finite usage counters were
+  recorded as evidence.
+
+Mutation check: reverting each guard (redirect, scheme, timeout ceiling, prompt shape,
+body-timeout classification, finite-integer budget) makes at least one court case fail.
+
+Benchmark: `src/bounded-local-unknown.bench.ts`; numbers and regression bounds in
+`docs/jira/v26.9.16/BENCH-RECEIPT.json`, enforced by the hardening court's
+performance-regression cases.

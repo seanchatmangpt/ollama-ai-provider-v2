@@ -6,6 +6,9 @@ on:
     paths:
       - 'src/bounded-local-unknown.ts'
       - 'src/bounded-local-unknown.test.ts'
+      - 'src/bounded-local-unknown.hardening.test.ts'
+      - 'src/bounded-local-unknown.local-server.ts'
+      - 'src/bounded-local-unknown.bench.ts'
       - 'src/index.ts'
       - '.github/workflows/v26-9-16-rfc-closure.yml'
   workflow_dispatch:
@@ -31,6 +34,6 @@ jobs:
           echo "HEAD=$GITHUB_SHA"
           git rev-parse HEAD
       - name: Bounded local UNKNOWN court
-        run: pnpm exec vitest --config vitest.node.config.mjs --run src/bounded-local-unknown.test.ts
+        run: pnpm exec vitest --config vitest.node.config.mjs --run src/bounded-local-unknown.test.ts src/bounded-local-unknown.hardening.test.ts
       - name: Type check
         run: pnpm run type-check
