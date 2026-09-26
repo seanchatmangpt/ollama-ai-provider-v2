@@ -56,3 +56,29 @@ body-timeout classification, finite-integer budget) makes at least one court cas
 Benchmark: `src/bounded-local-unknown.bench.ts`; numbers and regression bounds in
 `docs/jira/v26.9.16/BENCH-RECEIPT.json`, enforced by the hardening court's
 performance-regression cases.
+
+## v26.9.26 hardening, round 2
+
+Defects from the adversarial court on `36b4549`, each pinned by a case in
+`src/bounded-local-unknown.hardening.test.ts`:
+
+- allow-list admission is exact serialised-origin equality. Entries that carry a path, a trailing
+  slash, a different case or a non-string are inert; a look-alike host such as
+  `https://gpu.lan.evil.example` is refused for the entry `https://gpu.lan`.
+- the loopback set is exactly `127.0.0.1`, `localhost` and `::1`. `0.0.0.0`, `127.0.0.2`,
+  `[::ffff:127.0.0.1]`, `localhost.` and `localhost.evil.example` are refused.
+- a prompt of exactly `maxContextChars` is admitted and one more character is `RESOURCE_EXHAUSTED`.
+- `timeoutMs` is a wall-clock deadline raced against the attempt. A caller-injected `fetch` that
+  ignores the `AbortSignal` still returns `RESOURCE_EXHAUSTED local_timeout_budget_exhausted`.
+- the candidate is bounded on the wrapper side: `maxOutputChars` defaults to
+  `maxOutputTokens * 32`, so a provider that omits or under-reports `eval_count` gets
+  `RESOURCE_EXHAUSTED candidate_exceeded_output_char_budget`. The response body is read as a
+  stream and cut off at `1 MiB + 6 * maxOutputChars` bytes
+  (`local_response_body_budget_exhausted`).
+- the loopback round-trip regression bound is p95 < 100 ms. The previous 25 ms bound failed
+  under host load.
+
+Mutation check: prefix allow-list matching, adding `0.0.0.0` to the loopback set, `>=` on the
+context check, removing the deadline race, removing or loosening the char ceiling, removing the
+body byte ceiling and skipping `maxOutputChars` validation are each killed by at least one case.
+
