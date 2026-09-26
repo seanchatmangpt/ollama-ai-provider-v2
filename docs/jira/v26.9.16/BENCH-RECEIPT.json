@@ -1,0 +1,135 @@
+{
+  "schema": "v26.9.26/bench-receipt/1",
+  "repository": "seanchatmangpt/ollama-ai-provider-v2",
+  "subject": {
+    "pr": 1,
+    "parent_head": "a77330e840a4afa33d5e5265e51db5fcbd81c43b",
+    "note": "numbers measured on the hardened source committed with this receipt (commit parent = parent_head); commit SHA cannot be embedded in its own tree"
+  },
+  "command": "./node_modules/.bin/vitest bench --run --config vitest.node.config.mjs src/bounded-local-unknown.bench.ts --outputJson bench.json",
+  "environment": {
+    "node": "v26.8.1",
+    "platform": "macOS-26.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "vitest": "4.0.15",
+    "provider": "real loopback node:http server (src/bounded-local-unknown.local-server.ts)"
+  },
+  "unit": "ms per call (hz = calls/s)",
+  "hardened": {
+    "preflight refusal: non-admitted endpoint (no I/O)": {
+      "hz": 580939.911697,
+      "mean": 0.001721,
+      "p75": 0.000917,
+      "p99": 0.0015,
+      "min": 0.000708,
+      "max": 43.471084,
+      "rme": 28.166193,
+      "samples": 290470
+    },
+    "preflight refusal: invalid budget (no I/O)": {
+      "hz": 446202.370684,
+      "mean": 0.002241,
+      "p75": 0.001208,
+      "p99": 0.0025,
+      "min": 0.000958,
+      "max": 31.341292,
+      "rme": 21.90708,
+      "samples": 227611
+    },
+    "candidate round trip over loopback HTTP": {
+      "hz": 488.680674,
+      "mean": 2.046326,
+      "p75": 2.334166,
+      "p99": 4.254625,
+      "min": 0.453541,
+      "max": 8.166583,
+      "rme": 4.708561,
+      "samples": 245
+    }
+  },
+  "pr_head_before_hardening": {
+    "preflight refusal: non-admitted endpoint (no I/O)": {
+      "hz": 831113.293554,
+      "mean": 0.001203,
+      "p75": 0.00075,
+      "p99": 0.001125,
+      "min": 0.000541,
+      "max": 43.937834,
+      "rme": 25.239338,
+      "samples": 415557
+    },
+    "preflight refusal: invalid budget (no I/O)": {
+      "hz": 1689.380839,
+      "mean": 0.591933,
+      "p75": 0.456125,
+      "p99": 6.032417,
+      "min": 0.096458,
+      "max": 48.084375,
+      "rme": 28.156323,
+      "samples": 845
+    },
+    "candidate round trip over loopback HTTP": {
+      "hz": 451.548909,
+      "mean": 2.2146,
+      "p75": 2.605083,
+      "p99": 5.370833,
+      "min": 0.371375,
+      "max": 5.577167,
+      "rme": 5.488472,
+      "samples": 226
+    }
+  },
+  "observation": "On the pre-hardening head the invalid-budget (timeoutMs NaN) case was not refused: it reached the network (fetch to the default 127.0.0.1:11434), 0.59 ms mean vs 0.0022 ms once refused in pre-flight. Loopback round-trip cost is unchanged by hardening (2.05 vs 2.21 ms mean, within rme).",
+  "regression_bounds": [
+    {
+      "test": "src/bounded-local-unknown.hardening.test.ts > performance regression bound > pre-flight refusal path stays far below 1 ms per call",
+      "bound": "mean < 0.25 ms over 5000 calls",
+      "recorded_mean_ms": 0.0017
+    },
+    {
+      "test": "src/bounded-local-unknown.hardening.test.ts > performance regression bound > wrapper round trip over loopback stays within the recorded bound",
+      "bound": "p95 < 100 ms over 200 calls",
+      "recorded_p99_ms": 4.25,
+      "loaded_host_observed_p99_ms": 25.25,
+      "rationale": "25 ms p95 failed spuriously under host load (audit rerun p99 25.25 ms); 100 ms keeps a >20x regression guard over the idle p99."
+    }
+  ],
+  "authority": "NONE",
+  "evidence_ceiling": "LOCAL_RUN",
+  "round2_after_deadline_race_and_bounded_body": {
+    "change": "wall-clock deadline race independent of AbortSignal; streaming body read with byte ceiling; wrapper-side candidate char ceiling",
+    "results": {
+      "preflight refusal: non-admitted endpoint (no I/O)": {
+        "hz": 1100614.3820968985,
+        "mean": 0.0009085834387288241,
+        "p75": 0.0007910000000492801,
+        "p99": 0.0012089999999602696,
+        "min": 0.0005829999998923086,
+        "max": 6.142374999999902,
+        "rme": 4.653912789464902,
+        "sampleCount": 550308
+      },
+      "preflight refusal: invalid budget (no I/O)": {
+        "hz": 788700.9526051724,
+        "mean": 0.0012679076862997082,
+        "p75": 0.0010839999999916472,
+        "p99": 0.0016249999998763087,
+        "min": 0.0008329999998295534,
+        "max": 33.70970800000009,
+        "rme": 15.012463048061825,
+        "sampleCount": 394351
+      },
+      "candidate round trip over loopback HTTP": {
+        "hz": 372.9289807849361,
+        "mean": 2.6814757005347585,
+        "p75": 3.0399170000000595,
+        "p99": 9.557500000000346,
+        "min": 0.6584579999998823,
+        "max": 14.517207999999755,
+        "rme": 7.703317423111558,
+        "sampleCount": 187
+      }
+    },
+    "observation": "Pre-flight refusal paths unchanged (<0.002 ms mean). Loopback round trip 2.68 ms mean on a host also running other workflows, within the regression bound."
+  }
+}
